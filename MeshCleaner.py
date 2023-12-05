@@ -1,194 +1,241 @@
 bl_info = {
-    "name": "MeshCleaner",
+    "name": "Cleanup Utilities",
     "author": "Anthony Dimovski",
     "version": (1, 0),
-    "blender": (2, 93, 0),
-    "location": "View3D > Sidebar > Item Tab"
-    "warning": "",
-    "doc_url": "",
-    "category": "3D View",
+    "blender": (4, 0, 1),
+    "category": "Tool"
 }
 
 import bpy
 
-
-class EnableAutoSmooth(bpy.types.Operator):
-    """This enables Auto Smooth and sets a value of 180"""
-    bl_idname = "object.enable_auto_smooth"
-    bl_label = "Enable Auto Smooth"
-    
-    def execute(self, context):
-        for obj in context.selected_objects:
-            if obj.type == 'MESH':
-                obj.data.use_auto_smooth = True
-                obj.data.auto_smooth_angle = 3.14159  # 180 degrees in radians
-        return {'FINISHED'}
-
-
-class ObjNameToMeshName(bpy.types.Operator):
-    """Obj Name to Data Name"""
+class ObjectNameToMeshNameOperator(bpy.types.Operator):
     bl_idname = "object.objname_to_meshname"
     bl_label = "Obj Name to Data Name"
-    
+    bl_options = {'REGISTER', 'UNDO'}
+    bl_description = "Converts the object name into the data mesh name for parity"
+
     def execute(self, context):
-        for obj in context.selected_objects:
+        for obj in bpy.context.selected_objects:
             if obj.type == 'MESH':
                 obj.data.name = obj.name
+
+        self.report({'INFO'}, 'Object Name to Mesh Name executed successfully')
         return {'FINISHED'}
 
+class OBJECT_OT_remove_all_vertex_groups(bpy.types.Operator):
+    bl_idname = "object.remove_all_vertex_groups"
+    bl_label = "Remove All Vertex Groups"
+    bl_options = {'REGISTER', 'UNDO'}
+    bl_description = "Removes Vertex Groups"
 
-class RemoveVertexGroups(bpy.types.Operator):
-    """Remove Vertex Groups"""
-    bl_idname = "object.remove_vertex_groups"
-    bl_label = "Remove Vertex Groups"
-    
     def execute(self, context):
-        for obj in context.selected_objects:
+        # Use a list comprehension to filter only mesh objects
+        mesh_objects = [obj for obj in bpy.context.selected_objects if obj.type == 'MESH']
+
+        # Remove all vertex groups from the filtered mesh objects
+        for obj in mesh_objects:
+            for vertex_group in obj.vertex_groups:
+                obj.vertex_groups.remove(vertex_group)
+
+        return {'FINISHED'}
+
+class OBJECT_OT_remove_all_shape_keys(bpy.types.Operator):
+    bl_idname = "object.remove_all_shape_keys"
+    bl_label = "Remove All Shape Keys"
+    bl_options = {'REGISTER', 'UNDO'}
+    bl_description = "Removes Shape Keys"
+
+    def execute(self, context):
+        # Iterate over all selected objects
+        for obj in bpy.context.selected_objects:
+            # Check if the object is a mesh and has shape keys
+            if obj.type == 'MESH' and obj.data.shape_keys:
+                # Remove all shape keys
+                for shape_key in obj.data.shape_keys.key_blocks:
+                    obj.shape_key_remove(shape_key)
+
+        return {'FINISHED'}
+    
+class OBJECT_OT_remove_all_color_attributes(bpy.types.Operator):
+    bl_idname = "object.remove_all_color_attributes"
+    bl_label = "Remove All Color Attributes"
+    bl_options = {'REGISTER', 'UNDO'}
+    bl_description = "Removes Color Attributes and Vertex Colors"
+
+    def execute(self, context):
+        # Iterate over all selected objects
+        for obj in bpy.context.selected_objects:
+            # Check if the object is a mesh
             if obj.type == 'MESH':
-                obj.vertex_groups.clear()
+                # Set the object as active
+                bpy.context.view_layer.objects.active = obj
+
+                # Remove all color attributes
+                for color_attribute in reversed(obj.data.color_attributes):
+                    bpy.ops.geometry.color_attribute_remove()
+
         return {'FINISHED'}
 
+class OBJECT_OT_remove_unused_material_slots(bpy.types.Operator):
+    bl_idname = "object.remove_unused_material_slots"
+    bl_label = "Remove Unused Material Slots"
+    bl_options = {'REGISTER', 'UNDO'}
+    bl_description = "Removes unused material slots"
 
-class RemoveShapeKeys(bpy.types.Operator):
-    """Remove Shape Keys"""
-    bl_idname = "object.remove_shape_keys"
-    bl_label = "Remove Shape Keys"
-    
     def execute(self, context):
-        for obj in context.selected_objects:
-            if obj.type == 'MESH' and obj.data.shape_keys is not None:
-                key_blocks = obj.data.shape_keys.key_blocks
-                if key_blocks:
-                    while len(key_blocks) > 0:
-                        obj.shape_key_remove(key_blocks[0])
-        return {'FINISHED'}
-
-
-class RemoveVertexColors(bpy.types.Operator):
-    """Remove Vertex Colors, not to be confused with Color Attributes"""
-    bl_idname = "object.remove_vertex_colors"
-    bl_label = "Remove Vertex Colors"
-    
-    def execute(self, context):
-        for obj in context.selected_objects:
+        # Iterate over all selected objects
+        for obj in bpy.context.selected_objects:
+            # Check if the object is a mesh
             if obj.type == 'MESH':
-                while obj.data.vertex_colors:
-                    obj.data.vertex_colors.remove(obj.data.vertex_colors[0])
+                # Remove all unused material slots
+                bpy.context.view_layer.objects.active = obj
+                bpy.ops.object.material_slot_remove_unused()
+
         return {'FINISHED'}
 
-
-class RemoveCustomAttributes(bpy.types.Operator):
-    """This will remove every custom property, except for any UDP3DSMAX codes"""
-    bl_idname = "object.remove_custom_attributes"
-    bl_label = "Remove Custom Properties"
+class ExecuteAllOperatorsOperator(bpy.types.Operator):
+    bl_idname = "object.execute_all_operators"
+    bl_label = "Execute All Above Operators"
+    bl_options = {'REGISTER', 'UNDO'}
+    bl_description = "Excecutes all above operations"
     
-    def execute(self, context):
-        for obj in context.selected_objects:
-            custom_properties = list(obj.keys())
-            to_remove = [prop for prop in custom_properties if prop != 'UDP3DSMAX']
-            for prop in to_remove:
-                del obj[prop]
-        return {'FINISHED'}
-
-
-class RemoveAttrIndices(bpy.types.Operator):
-    """Remove Attribute Indices"""
-    bl_idname = "object.remove_attr_indices"
-    bl_label = "Remove Attribute Indices"
-    
-    def execute(self, context):
-        for obj in context.selected_objects:
-            if obj.type == 'MESH':
-                attributes_to_remove = [attr for attr in obj.data.attributes]
-                for attr in attributes_to_remove:
-                    obj.data.attributes.remove(attr)
-        return {'FINISHED'}
-
-
-class RemoveUnusedMaterialsSlots(bpy.types.Operator):
-    """Remove Unused Material Slots"""
-    bl_idname = "object.remove_unused_materials_slots"
-    bl_label = "Remove Unused Materials Slots"
-    
-    def execute(self, context):
-        for obj in context.selected_objects:
-            if obj.type == 'MESH':
-                for slot in obj.material_slots:
-                    if not slot.material:
-                        bpy.ops.object.material_slot_remove({'object': obj})
-        return {'FINISHED'}
-
-
-class DoAllOperations(bpy.types.Operator):
-    """Does all of the above operations except for Auto Smooth"""
-    bl_idname = "object.do_all_operations"
-    bl_label = "Do all operations"
-
     def execute(self, context):
         bpy.ops.object.objname_to_meshname()
-        bpy.ops.object.remove_vertex_groups()
-        bpy.ops.object.remove_shape_keys()
-        bpy.ops.object.remove_vertex_colors()
-        bpy.ops.object.remove_custom_attributes()
-        bpy.ops.object.remove_attr_indices()
-        bpy.ops.object.remove_unused_materials_slots()
+        bpy.ops.object.remove_all_vertex_groups()
+        bpy.ops.object.remove_all_shape_keys()
+        bpy.ops.object.remove_all_color_attributes()
+        bpy.ops.object.remove_unused_material_slots()
+        
+        self.report({'INFO'}, 'All operators executed successfully')
         return {'FINISHED'}
 
 
-class MeshCleanerPanel(bpy.types.Panel):
-    """Creates a Panel in the Object properties window"""
-    bl_label = "Mesh Cleaner"
-    bl_idname = "OBJECT_PT_hello"
-    bl_space_type = 'VIEW_3D'
-    bl_region_type = 'UI'
-    bl_category = 'Item'
+
+
+class OBJECT_OT_remove_custom_properties(bpy.types.Operator):
+    bl_idname = "object.remove_custom_properties"
+    bl_label = "Remove Custom Properties"
+    bl_options = {'REGISTER', 'UNDO'}
+    bl_description = "Removes all Custom Properties that are NOT EQUAL TO 'UDP3DSMAX'"
+
+    def execute(self, context):
+        # Specify the name of the custom property to keep
+        property_to_keep = "UDP3DSMAX"
+
+        # Iterate over all selected objects
+        for obj in bpy.context.selected_objects:
+            # Create a list of custom properties to remove
+            properties_to_remove = [prop_name for prop_name in obj.keys() if prop_name != property_to_keep]
+
+            # Iterate over the list and remove the custom properties
+            for prop_name in properties_to_remove:
+                del obj[prop_name]
+
+        return {'FINISHED'}
+
+class OBJECT_OT_Add_Custom_Property(bpy.types.Operator):
+    bl_idname = "object.add_custom_property"
+    bl_label = "Add Custom Property"
+    bl_description = "Adds a 'UDP3DSMAX' string custom property"
+    
+    def execute(self, context):
+        # Specify the name of the custom property
+        property_name = "UDP3DSMAX"
+        default_value = ""
+        
+        # Iterate through all selected objects
+        for obj in bpy.context.selected_objects:
+            # Add the string custom property to each selected object
+            obj[property_name] = default_value
+        
+        return {'FINISHED'}
+    
+class OBJECT_OT_Remove_UDP3DSMAX_Property(bpy.types.Operator):
+    bl_idname = "object.remove_udp3dsmax_property"
+    bl_label = "Remove Custom Property"
+    bl_description = "Removes the 'UDP3DSMAX' string custom property"
+    
+    def execute(self, context):
+        # Specify the name of the custom property
+        property_name = "UDP3DSMAX"
+        
+        # Iterate through all selected objects
+        for obj in bpy.context.selected_objects:
+            # Check if the property exists before removing
+            if property_name in obj:
+                del obj[property_name]
+        
+        return {'FINISHED'}
+
+class VIEW3D_PT_CleanupUtilities(bpy.types.Panel):
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_category = "Tool"
+    bl_label = "Cleanup Utilities"
     
     def draw(self, context):
-        layout = self.layout
-        row = layout.row()
-        row.operator('object.enable_auto_smooth', icon='NORMALS_VERTEX')
-        row = layout.row()
-        row.operator('object.objname_to_meshname', icon='MESH_DATA')
-        row = layout.row()
-        row.operator('object.remove_vertex_groups', icon='GROUP_VERTEX')
-        row = layout.row()
-        row.operator('object.remove_shape_keys', icon='SHAPEKEY_DATA')
-        row = layout.row()
-        row.operator('object.remove_vertex_colors', icon='COLOR')
-        row = layout.row()
-        row.operator('object.remove_custom_attributes', icon='DUPLICATE')
-        row = layout.row()
-        row.operator('object.remove_attr_indices', icon='HAND')
-        row = layout.row()
-        row.operator('object.remove_unused_materials_slots', icon='MATERIAL')
-        row = layout.row()
-        row.operator('object.do_all_operations', icon='ERROR')
+        """Define the layout of the panel"""
+
+        row = self.layout.row()
+        row.operator("object.objname_to_meshname", text="Obj Name -> Data Name", icon='MESH_DATA')
+        
+        row = self.layout.row()
+        row.operator("object.remove_all_vertex_groups", text="Remove Vertex Groups", icon='GROUP_VERTEX')
+
+        row = self.layout.row()
+        row.operator("object.remove_all_shape_keys", text="Remove Shape Keys", icon='SHAPEKEY_DATA')
+
+        row = self.layout.row()
+        row.operator("object.remove_all_color_attributes", text="Remove Color Attributes", icon='COLOR')
+
+        row = self.layout.row()
+        row.operator("object.remove_unused_material_slots", text="Remove Unused Material Slots", icon='MATERIAL')
+        
+        row = self.layout.row()
+        row.operator("object.execute_all_operators", text="Execute All Above Operations", icon='ERROR')
+
+        # UDP3DSMAX section
+        self.layout.separator(factor=1.0,)
+        row = self.layout.row(align=True)
+        row.label(text="UDP3DSMAX")
+
+        row = self.layout.row()
+        row.operator("object.remove_custom_properties", text="!= UDP3DSMAX")
+        
+        row = self.layout.row()
+        row.operator("object.add_custom_property", text="Add UDP3DSMAX")
+        
+        row = self.layout.row()
+        row.operator("object.remove_udp3dsmax_property", text="Remove UDP3DSMAX")
+
 
 def register():
-    bpy.utils.register_class(MeshCleanerPanel)
-    bpy.utils.register_class(EnableAutoSmooth)
-    bpy.utils.register_class(ObjNameToMeshName)
-    bpy.utils.register_class(RemoveVertexGroups)
-    bpy.utils.register_class(RemoveShapeKeys)
-    bpy.utils.register_class(RemoveVertexColors)
-    bpy.utils.register_class(RemoveCustomAttributes)
-    bpy.utils.register_class(RemoveAttrIndices)
-    bpy.utils.register_class(RemoveUnusedMaterialsSlots)
-    bpy.utils.register_class(DoAllOperations)
-
+    bpy.utils.register_class(ObjectNameToMeshNameOperator)
+    bpy.utils.register_class(OBJECT_OT_remove_all_vertex_groups)
+    bpy.utils.register_class(OBJECT_OT_remove_all_shape_keys)
+    bpy.utils.register_class(OBJECT_OT_remove_all_color_attributes)
+    bpy.utils.register_class(OBJECT_OT_remove_unused_material_slots)
+    bpy.utils.register_class(ExecuteAllOperatorsOperator)
+    
+    # UDP3DSMAX section
+    bpy.utils.register_class(OBJECT_OT_remove_custom_properties)
+    bpy.utils.register_class(OBJECT_OT_Add_Custom_Property)
+    bpy.utils.register_class(OBJECT_OT_Remove_UDP3DSMAX_Property)
+    bpy.utils.register_class(VIEW3D_PT_CleanupUtilities)
 
 def unregister():
-    bpy.utils.unregister_class(MeshCleanerPanel)
-    bpy.utils.unregister_class(EnableAutoSmooth)
-    bpy.utils.unregister_class(ObjNameToMeshName)
-    bpy.utils.unregister_class(RemoveVertexGroups)
-    bpy.utils.unregister_class(RemoveShapeKeys)
-    bpy.utils.unregister_class(RemoveVertexColors)
-    bpy.utils.unregister_class(RemoveCustomAttributes)
-    bpy.utils.unregister_class(RemoveAttrIndices)
-    bpy.utils.unregister_class(RemoveUnusedMaterialsSlots)
-    bpy.utils.unregister_class(DoAllOperations)
-
+    bpy.utils.unregister_class(ObjectNameToMeshNameOperator)
+    bpy.utils.unregister_class(OBJECT_OT_remove_all_vertex_groups)
+    bpy.utils.unregister_class(OBJECT_OT_remove_all_shape_keys)
+    bpy.utils.unregister_class(OBJECT_OT_remove_all_color_attributes)
+    bpy.utils.unregister_class(OBJECT_OT_remove_unused_material_slots)
+    bpy.utils.unregister_class(ExecuteAllOperatorsOperator)
+    
+    # UDP3DSMAX section
+    bpy.utils.unregister_class(OBJECT_OT_remove_custom_properties)
+    bpy.utils.unregister_class(OBJECT_OT_Add_Custom_Property)
+    bpy.utils.unregister_class(OBJECT_OT_Remove_UDP3DSMAX_Property)
+    bpy.utils.unregister_class(VIEW3D_PT_CleanupUtilities)
 
 if __name__ == "__main__":
     register()
